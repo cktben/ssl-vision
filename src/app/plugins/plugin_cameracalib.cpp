@@ -118,7 +118,7 @@ void PluginCameraCalibration::detectEdges(FrameData * data)
   } 
   else 
   {
-    fprintf(stderr,"ColorThresholding needs YUV422 or RGB8 as input image, but found: %s\n",Colors::colorFormatToString(data->video.getColorFormat()).c_str());
+    fprintf(stderr,"CameraCalibration needs YUV422 or RGB8 as input image, but found: %s\n",Colors::colorFormatToString(data->video.getColorFormat()).c_str());
     return;
   }
   
