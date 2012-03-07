@@ -800,7 +800,7 @@ bool CaptureDC1394v2::resetBus() {
   }
 
   if (dc1394_camera_enumerate(dc1394_instance, &cam_list)!=DC1394_SUCCESS) {
-    fprintf(stderr,"CaptureDC1394v2 Error: can't find cameras");
+    fprintf(stderr,"CaptureDC1394v2 Error: can't find cameras\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -808,7 +808,7 @@ bool CaptureDC1394v2::resetBus() {
   }
 
   if (cam_list==0) {
-    fprintf(stderr,"CaptureDC1394v2 Error: Camera List was a null pointer");
+    fprintf(stderr,"CaptureDC1394v2 Error: Camera List was a null pointer\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -816,7 +816,7 @@ bool CaptureDC1394v2::resetBus() {
   }
 
   if (cam_list->num==0) {
-    fprintf(stderr,"CaptureDC1394v2 Error: 0 cameras found");
+    fprintf(stderr,"CaptureDC1394v2 Error: 0 cameras found\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -1021,7 +1021,7 @@ bool CaptureDC1394v2::startCapture()
   } else if (fps <= 240) {
     dcfps=DC1394_FRAMERATE_240;
   } else {
-    fprintf(stderr,"CaptureDC1394v2 Error: The library does not support framerates higher than 240 fps (does your camera?).");
+    fprintf(stderr,"CaptureDC1394v2 Error: The library does not support framerates higher than 240 fps (does your camera?).\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -1029,7 +1029,7 @@ bool CaptureDC1394v2::startCapture()
   }
 
   if (dc1394_camera_enumerate(dc1394_instance, &cam_list)!=DC1394_SUCCESS) {
-    fprintf(stderr,"CaptureDC1394v2 Error: can't find cameras");
+    fprintf(stderr,"CaptureDC1394v2 Error: can't find cameras\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -1037,7 +1037,7 @@ bool CaptureDC1394v2::startCapture()
   }
 
   if (cam_list==0) {
-    fprintf(stderr,"CaptureDC1394v2 Error: Camera List was a null pointer");
+    fprintf(stderr,"CaptureDC1394v2 Error: Camera List was a null pointer\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -1045,7 +1045,7 @@ bool CaptureDC1394v2::startCapture()
   }
 
   if (cam_list->num==0) {
-    fprintf(stderr,"CaptureDC1394v2 Error: 0 cameras found");
+    fprintf(stderr,"CaptureDC1394v2 Error: 0 cameras found\n");
     #ifndef VDATA_NO_QT
       mutex.unlock();
     #endif
@@ -1244,8 +1244,8 @@ bool CaptureDC1394v2::startCapture()
             }
           }
           if (found==false) {
-            fprintf(stderr,"CaptureDC1394v2 Error: No Format 7 modes available!");
-            fprintf(stderr,"CaptureDC1394v2 Error: Maybe try selecting a supported Format 0 resolution/framerate?");
+            fprintf(stderr,"CaptureDC1394v2 Error: No Format 7 modes available!\n");
+            fprintf(stderr,"CaptureDC1394v2 Error: Maybe try selecting a supported Format 0 resolution/framerate?\n");
             #ifndef VDATA_NO_QT
               mutex.unlock();
             #endif
@@ -1256,8 +1256,8 @@ bool CaptureDC1394v2::startCapture()
         }
 
       } else {
-        fprintf(stderr,"CaptureDC1394v2 Error: Selected color format/resolution not natively supported!");
-        fprintf(stderr,"CaptureDC1394v2 Error: Maybe try switching to auto or a format7 mode.");
+        fprintf(stderr,"CaptureDC1394v2 Error: Selected color format/resolution not natively supported!\n");
+        fprintf(stderr,"CaptureDC1394v2 Error: Maybe try switching to auto or a format7 mode.\n");
         #ifndef VDATA_NO_QT
           mutex.unlock();
         #endif
@@ -1572,7 +1572,7 @@ bool CaptureDC1394v2::convertFrame(const RawImage & src, RawImage & target, Colo
       if (debayer && output_fmt==COLOR_RGB16) {
         //de-bayer
         if ( dc1394_bayer_decoding_16bit( (uint16_t *)src.getData(), (uint16_t *)target.getData(), src.getWidth(), src.getHeight(), bayer_format, bayer_method, y16bits) != DC1394_SUCCESS ) {
-          fprintf(stderr,"Error in 16bit DC1394 Bayer Conversion");
+          fprintf(stderr,"Error in 16bit DC1394 Bayer Conversion\n");
 
           #ifndef VDATA_NO_QT
             mutex.unlock();
