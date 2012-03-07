@@ -32,6 +32,8 @@
 #include "capturestats.h"
 #include "affinity_manager.h"
 
+class CaptureV4L2;
+
 /*!
   \class   CaptureThread
   \brief   A thread for capturing and processing video data
@@ -47,6 +49,7 @@ protected:
   FrameCounter * counter;
   CaptureInterface * capture;
   CaptureInterface * captureDC1394;
+  CaptureInterface * captureV4L2;
   CaptureInterface * captureFiles;
   CaptureInterface * captureGenerator;
   AffinityManager * affinity;
@@ -55,6 +58,7 @@ protected:
   int camId;
   VarList * settings;
   VarList * dc1394;
+  VarList * v4l2;
   VarList * generator;
   VarList * fromfile;
   VarList * control;
