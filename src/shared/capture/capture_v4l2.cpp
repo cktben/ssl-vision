@@ -37,6 +37,8 @@ CaptureV4L2::CaptureV4L2 ( VarList * _settings ) : CaptureInterface ( _settings 
 {
     fd = -1;
 
+    settings->addChild(v_controls = new VarList("Camera Controls"));
+
     settings->addChild ( v_colorout=new VarStringEnum ( "convert to mode",Colors::colorFormatToString ( COLOR_YUV422_UYVY ) ) );
     v_colorout->addItem ( Colors::colorFormatToString ( COLOR_RGB8 ) );
     v_colorout->addItem ( Colors::colorFormatToString ( COLOR_YUV422_UYVY ) );
@@ -48,6 +50,71 @@ CaptureV4L2::CaptureV4L2 ( VarList * _settings ) : CaptureInterface ( _settings 
 
 CaptureV4L2::~CaptureV4L2()
 {
+}
+
+//FIXME - Controls are created and changed when the XML is loaded but before the camera is open, so the changes aren't applied to the camera.
+
+void CaptureV4L2::populateConfiguration()
+{
+    // Enumerate formats
+    struct v4l2_fmtdesc fmtdesc;
+    fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmtdesc.index = 0;
+    while (ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc) == 0)
+    {
+        printf("Format %d: %s\n", fmtdesc.index, fmtdesc.description);
+        ++fmtdesc.index;
+    }
+
+    // Enumerate controls
+    struct v4l2_queryctrl qctrl;
+    qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+    while (ioctl(fd, VIDIOC_QUERYCTRL, &qctrl) == 0)
+    {
+        VarType *c = 0;
+        switch (qctrl.type)
+        {
+            case V4L2_CTRL_TYPE_INTEGER:
+                c = v_controls->findChildOrReplace(new VarInt((const char *)qctrl.name, qctrl.default_value, qctrl.minimum, qctrl.maximum));
+                break;
+
+            case V4L2_CTRL_TYPE_BOOLEAN:
+                c = v_controls->findChildOrReplace(new VarBool((const char *)qctrl.name, qctrl.default_value));
+                break;
+        }
+
+        if (c)
+        {
+            camera_controls[c] = qctrl.id;
+            connect(c, SIGNAL(hasChanged(VarType *)), SLOT(controlChanged(VarType *)));
+        }
+
+        qctrl.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+    }
+}
+
+void CaptureV4L2::controlChanged(VarType *var)
+{
+    struct v4l2_control value;
+    value.id = camera_controls[var];
+
+    VarBool *v_bool;
+    VarInt *v_int;
+    if (v_bool = dynamic_cast<VarBool *>(var))
+    {
+        value.value = v_bool->getBool();
+    } else if (v_int = dynamic_cast<VarInt *>(var))
+    {
+        value.value = v_int->getInt();
+    } else {
+        // Not implemented: won't happen
+        return;
+    }
+
+    if (ioctl(fd, VIDIOC_S_CTRL, &value))
+    {
+        fprintf(stderr, "CaptureV4L2::controlChanged: Failed to set control %d: %m\n", value.id);
+    }
 }
 
 bool CaptureV4L2::startCapture()
@@ -66,33 +133,7 @@ bool CaptureV4L2::startCapture()
         return false;
     }
 
-#if 0
-    // Enumerate all formats
-    //FIXME - Move this somewhere else so it happens whenever the device is chosen.
-    //        Then a combobox can be populated with all available formats.
-    struct v4l2_fmtdesc fmtdesc;
-    fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmtdesc.index = 0;
-    while (true)
-    {
-        int ret = ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc);
-        if (ret == -1)
-        {
-            if (errno == EINVAL)
-            {
-                // We've finished all formats
-                break;
-            } else {
-                fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_ENUM_FMT returned %m\n");
-                close(fd);
-                fd = -1;
-                return false;
-            }
-        }
-        printf("Format %d: %s\n", fmtdesc.index, fmtdesc.description);
-        ++fmtdesc.index;
-    }
-#endif
+    populateConfiguration();
 
     // Set the video format.
     // This gives our fd exclusive access to the device.
