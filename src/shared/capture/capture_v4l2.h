@@ -14,7 +14,7 @@
 //========================================================================
 /*!
   \file    capture_generator.h
-  \brief   C++ Interface: CaptureGenerator
+  \brief   Image capture with the Video4Linux 2 API
   \author  Stefan Zickler, (C) 2009
   \author  Ben Johnson, (C) 2012
 */
@@ -26,6 +26,7 @@
 #include "captureinterface.h"
 #include <string>
 #include <vector>
+#include <map>
 #include "VarTypes.h"
 #include <linux/videodev2.h>
 #ifndef VDATA_NO_QT
@@ -55,12 +56,22 @@ class CaptureV4L2 : public CaptureInterface
 
 protected:
   int fd;
-  
+
+  // Adds choices to comboboxes and adds camera controls
+  void populateConfiguration();
+
   struct v4l2_buffer last_buf;
   vector<RawImage> buffers;
   
   // Configuration
-  VarStringEnum * v_colorout;
+  VarStringEnum *v_colorout;
+  VarList *v_controls;
+
+  // Map from VarType to camera control ID for each control
+  map<VarType *, uint32_t> camera_controls;
+
+protected slots:
+  void controlChanged(VarType *var);
 
 public:
 #ifndef VDATA_NO_QT
