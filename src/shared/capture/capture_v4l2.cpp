@@ -39,11 +39,12 @@ CaptureV4L2::CaptureV4L2 ( VarList * _settings ) : CaptureInterface ( _settings 
 
     settings->addChild(v_controls = new VarList("Camera Controls"));
 
-    settings->addChild ( v_colorout=new VarStringEnum ( "convert to mode",Colors::colorFormatToString ( COLOR_YUV422_UYVY ) ) );
-    v_colorout->addItem ( Colors::colorFormatToString ( COLOR_RGB8 ) );
-    v_colorout->addItem ( Colors::colorFormatToString ( COLOR_YUV422_UYVY ) );
+    settings->addChild(v_colorout = new VarStringEnum("convert to mode", Colors::colorFormatToString(COLOR_YUV422_UYVY)));
+    v_colorout->addItem(Colors::colorFormatToString(COLOR_RGB8));
+    v_colorout->addItem(Colors::colorFormatToString(COLOR_YUV422_UYVY));
 
-    //FIXME - Identify device by device node name (/dev/video*)
+    settings->addChild(v_device = new VarString("Device", "/dev/video0"));
+
     //FIXME - Identify device by connection
     //FIXME - Identify device by serial number
 }
@@ -124,10 +125,10 @@ bool CaptureV4L2::startCapture()
 #endif
 
     //FIXME - Get device name from configuration
-    const char *device ="/dev/video0";
+    const char *device = v_device->getString().c_str();
 
     fd = open(device, O_RDWR);
-    if (fd == -1)
+    if (fd < 0)
     {
         fprintf(stderr, "CaptureV4L2::startCapture: Can't open %s: %m\n", device);
         return false;
@@ -144,7 +145,7 @@ bool CaptureV4L2::startCapture()
     fmt.fmt.pix.height = 480;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_NONE;
-    if (ioctl(fd, VIDIOC_S_FMT, &fmt) == -1)
+    if (ioctl(fd, VIDIOC_S_FMT, &fmt) != 0)
     {
         fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_S_FMT failed: %m\n");
         close(fd);
@@ -179,16 +180,19 @@ bool CaptureV4L2::startCapture()
     req.count = 2;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_MMAP;
-    if (ioctl(fd, VIDIOC_REQBUFS, &req) == -1)
+    if (ioctl(fd, VIDIOC_REQBUFS, &req) != 0)
     {
-        fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_REQBUFS failed: %m\n");
+        fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_REQBUFS failed: %d %m\n", errno);
         close(fd);
         fd = -1;
         return false;
     }
 
-    // Map buffers into our address space
+    // Create all new RawImages
+    buffers.clear();
     buffers.resize(req.count);
+
+    // Map buffers into our address space
     for (int i = 0; i < req.count; ++i)
     {
         // Get the size and mmap offset for this buffer
@@ -196,7 +200,7 @@ bool CaptureV4L2::startCapture()
         buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         buf.memory = V4L2_MEMORY_MMAP;
         buf.index = i;
-        if (ioctl(fd, VIDIOC_QUERYBUF, &buf) == -1)
+        if (ioctl(fd, VIDIOC_QUERYBUF, &buf) != 0)
         {
             fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_QUERYBUF failed: %m\n");
             close(fd);
@@ -221,7 +225,7 @@ bool CaptureV4L2::startCapture()
         buffers[i].setData((unsigned char *)data);
 
         // Enqueue this buffer
-        if (ioctl(fd, VIDIOC_QBUF, &buf) == -1)
+        if (ioctl(fd, VIDIOC_QBUF, &buf) != 0)
         {
             fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_QBUF failed: %m\n");
             close(fd);
@@ -229,10 +233,10 @@ bool CaptureV4L2::startCapture()
             return false;
         }
     }
-    
+
     // Start streaming
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    if (ioctl(fd, VIDIOC_STREAMON, &type) == -1)
+    if (ioctl(fd, VIDIOC_STREAMON, &type) != 0)
     {
         fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_STREAMON failed: %m\n");
         close(fd);
@@ -240,7 +244,8 @@ bool CaptureV4L2::startCapture()
         return false;
     }
 
-    //FIXME - Make VarTypes read-only
+    // Make device configuration item read-only
+    v_device->addFlags(VARTYPE_FLAG_READONLY);
 
     return true;
 }
@@ -248,7 +253,10 @@ bool CaptureV4L2::startCapture()
 bool CaptureV4L2::stopCapture()
 {
     cleanup();
-    //FIXME - Make VarTypes read-write
+
+    // Make device configuration item read-write
+    v_device->removeFlags(VARTYPE_FLAG_READONLY);
+
     return true;
 }
 
@@ -267,10 +275,33 @@ void CaptureV4L2::cleanup()
     {
         // Stop streaming
         enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        if (ioctl(fd, VIDIOC_STREAMOFF, &type) == -1)
+        if (ioctl(fd, VIDIOC_STREAMOFF, &type) != 0)
         {
             fprintf(stderr, "CaptureV4L2::cleanup: VIDIOC_STREAMOFF failed: %m\n");
         }
+
+        // Unmap buffers.
+        // This has to be done or the buffers won't actually be released,
+        // even after close().
+        for (int i = 0; i < buffers.size(); ++i)
+        {
+            // Get the size of this buffer, according to the driver.
+            // This is not stored in RawImage.
+            struct v4l2_buffer buf;
+            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buf.memory = V4L2_MEMORY_MMAP;
+            buf.index = i;
+            if (ioctl(fd, VIDIOC_QUERYBUF, &buf) == 0)
+            {
+                munmap(buffers[i].getData(), buf.length);
+            }
+        }
+
+        // Delete all the RawImages.
+        // If they are left around, RawImage::setData (in startCapture, above) will try to
+        // free the old data pointer, but it was mmap'd and not allocated.
+        // Deleting a RawImage does not try to free the pointer.
+        buffers.clear();
 
         // Close the device
         close(fd);
@@ -287,7 +318,7 @@ RawImage CaptureV4L2::getFrame()
     // Get a frame from the device
     last_buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     last_buf.memory = V4L2_MEMORY_MMAP;
-    if (ioctl(fd, VIDIOC_DQBUF, &last_buf) == -1)
+    if (ioctl(fd, VIDIOC_DQBUF, &last_buf) != 0)
     {
         fprintf(stderr, "CaptureV4L2::getFrame: VIDIOC_DQBUF failed: %m\n");
         return RawImage();
@@ -299,22 +330,22 @@ RawImage CaptureV4L2::getFrame()
     return buffers[last_buf.index];
 }
 
-bool CaptureV4L2::copyAndConvertFrame ( const RawImage & src, RawImage & target )
+bool CaptureV4L2::copyAndConvertFrame(const RawImage & src, RawImage & target)
 {
 #ifndef VDATA_NO_QT
     QMutexLocker lock(&mutex);
 #endif
 
-    ColorFormat output_fmt = Colors::stringToColorFormat ( v_colorout->getSelection().c_str() );
-    ColorFormat src_fmt=src.getColorFormat();
+    ColorFormat output_fmt = Colors::stringToColorFormat(v_colorout->getSelection().c_str());
+    ColorFormat src_fmt = src.getColorFormat();
 
-    if ( target.getData() ==0 )
+    if (target.getData() == 0)
     {
-        target.allocate ( output_fmt, src.getWidth(), src.getHeight() );
+        target.allocate(output_fmt, src.getWidth(), src.getHeight());
     } else {
-        target.ensure_allocation ( output_fmt, src.getWidth(), src.getHeight() );
+        target.ensure_allocation(output_fmt, src.getWidth(), src.getHeight());
     }
-    target.setTime ( src.getTime() );
+    target.setTime(src.getTime());
 
     if (src_fmt == COLOR_YUV422_YUYV && output_fmt == COLOR_YUV422_UYVY)
     {
@@ -349,9 +380,9 @@ bool CaptureV4L2::copyAndConvertFrame ( const RawImage & src, RawImage & target 
         
         target.setColorFormat(COLOR_YUV422_UYVY);
     } else {
-        fprintf ( stderr,"Cannot copy and convert frame...unknown conversion selected from: %s to %s\n",
-                    Colors::colorFormatToString ( src_fmt ).c_str(),
-                    Colors::colorFormatToString ( output_fmt ).c_str() );
+        fprintf(stderr,"Cannot copy and convert frame...unknown conversion selected from: %s to %s\n",
+                    Colors::colorFormatToString(src_fmt).c_str(),
+                    Colors::colorFormatToString(output_fmt).c_str());
         return false;
     }
 
@@ -364,7 +395,7 @@ void CaptureV4L2::releaseFrame()
     QMutexLocker lock(&mutex);
 #endif
 
-    if (ioctl(fd, VIDIOC_QBUF, &last_buf) == -1)
+    if (ioctl(fd, VIDIOC_QBUF, &last_buf) != 0)
     {
         fprintf(stderr, "CaptureV4L2::releaseFrame: VIDIOC_QBUF failed: %m\n"); 
     }
