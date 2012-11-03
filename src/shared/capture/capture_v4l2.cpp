@@ -53,8 +53,6 @@ CaptureV4L2::~CaptureV4L2()
 {
 }
 
-//FIXME - Controls are created and changed when the XML is loaded but before the camera is open, so the changes aren't applied to the camera.
-
 void CaptureV4L2::populateConfiguration()
 {
     // Enumerate formats
@@ -72,16 +70,53 @@ void CaptureV4L2::populateConfiguration()
     qctrl.id = V4L2_CTRL_FLAG_NEXT_CTRL;
     while (ioctl(fd, VIDIOC_QUERYCTRL, &qctrl) == 0)
     {
-        VarType *c = 0;
-        switch (qctrl.type)
+        string name = (const char *)qctrl.name;
+        VarType *c = v_controls->findChild(name);
+        if (c)
         {
-            case V4L2_CTRL_TYPE_INTEGER:
-                c = v_controls->findChildOrReplace(new VarInt((const char *)qctrl.name, qctrl.default_value, qctrl.minimum, qctrl.maximum));
-                break;
+            // A control with this name already exists, which means a value was loaded from the config file.
+            // Set the control to the loaded value.
+            //
+            // We hope it's the right type.  Even if the type is wrong, the data will probably be set correctly
+            // by controlChanged because everything ends up as an integer anyway.
+            camera_controls[c] = qctrl.id;
 
-            case V4L2_CTRL_TYPE_BOOLEAN:
-                c = v_controls->findChildOrReplace(new VarBool((const char *)qctrl.name, qctrl.default_value));
-                break;
+            // Fix limits in case the camera we have differs from the loaded configuration
+            switch (qctrl.type)
+            {
+                case V4L2_CTRL_TYPE_INTEGER:
+                {
+                    VarInt *v_int = dynamic_cast<VarInt *>(c);
+                    if (v_int)
+                    {
+                        v_int->setMin(qctrl.minimum);
+                        v_int->setMax(qctrl.maximum);
+                    }
+                    break;
+                }
+            }
+
+            // Set the camera control to match the loaded configuration
+            controlChanged(c);
+
+            //FIXME - Set limits on VarInts
+        } else {
+            // This control does not exist, so create one.
+            switch (qctrl.type)
+            {
+                case V4L2_CTRL_TYPE_INTEGER:
+                    c = new VarInt(name, qctrl.default_value, qctrl.minimum, qctrl.maximum);
+                    break;
+
+                case V4L2_CTRL_TYPE_BOOLEAN:
+                    c = new VarBool(name, qctrl.default_value);
+                    break;
+            }
+
+            if (c)
+            {
+                v_controls->addChild(c);
+            }
         }
 
         if (c)
