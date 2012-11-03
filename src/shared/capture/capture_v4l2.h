@@ -65,6 +65,7 @@ protected:
   
   // Configuration
   VarStringEnum *v_colorout;
+  VarString *v_device;
   VarList *v_controls;
 
   // Map from VarType to camera control ID for each control
