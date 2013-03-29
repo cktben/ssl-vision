@@ -159,7 +159,6 @@ bool CaptureV4L2::startCapture()
     QMutexLocker lock(&mutex);
 #endif
 
-    //FIXME - Get device name from configuration
     const char *device = v_device->getString().c_str();
 
     fd = open(device, O_RDWR);
