@@ -159,6 +159,17 @@ bool CaptureV4L2::startCapture()
     QMutexLocker lock(&mutex);
 #endif
 
+    // Find the difference between time from gettimeofday and CLOCK_MONOTONIC.
+    // We really hope this process doesn't get preempted between the two clock calls.
+    struct timeval realtime;
+    gettimeofday(&realtime, 0);
+
+    struct timespec monotonic;
+    clock_gettime(CLOCK_MONOTONIC, &monotonic);
+
+    timeOffset = realtime.tv_sec + realtime.tv_usec * 1.0e-6 - monotonic.tv_sec - monotonic.tv_nsec * 1.0e-9;
+
+    // Open the V4L2 device.
     const char *device = v_device->getString().c_str();
 
     fd = open(device, O_RDWR);
@@ -384,7 +395,7 @@ RawImage CaptureV4L2::getFrame()
     }
 
     const struct timeval &tv = last_buf.timestamp;
-    buffers[last_buf.index].setTime((double)tv.tv_sec + tv.tv_usec*(1.0E-6));
+    buffers[last_buf.index].setTime((double)tv.tv_sec + tv.tv_usec*(1.0E-6) + timeOffset);
 
     return buffers[last_buf.index];
 }
