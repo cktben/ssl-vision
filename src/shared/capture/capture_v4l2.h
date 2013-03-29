@@ -71,6 +71,13 @@ protected:
   // Map from VarType to camera control ID for each control
   map<VarType *, uint32_t> camera_controls;
 
+  // Difference between wall time (gettimeofday) and CLOCK_MONOTONIC.
+  //
+  // Vision packets use time from gettimeofday, but V4L2 records capture times
+  // from CLOCK_MONOTONIC, so we find the difference when the camera is opened
+  // and add it for each frame.
+  double timeOffset;
+
 protected slots:
   void controlChanged(VarType *var);
 
