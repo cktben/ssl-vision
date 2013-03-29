@@ -170,6 +170,8 @@ bool CaptureV4L2::startCapture()
 
     populateConfiguration();
 
+    //FIXME - VarTypes for resolution and framerate.  These will have to be repopulated occasionally.
+
     // Set the video format.
     // This gives our fd exclusive access to the device.
     struct v4l2_format fmt;
@@ -185,6 +187,29 @@ bool CaptureV4L2::startCapture()
         close(fd);
         fd = -1;
         return false;
+    }
+
+    // Set framerate
+    struct v4l2_streamparm parm;
+    parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (ioctl(fd, VIDIOC_G_PARM, &parm) != 0)
+    {
+        fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_G_PARM failed: %m\n");
+        close(fd);
+        fd = -1;
+        return false;
+    }
+
+    if (!(parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME))
+    {
+        fprintf(stderr, "CaptureV4L2::startCapture: Can't set framerate because V4L2_CAP_TIMEPERFRAME is not supported\n");
+    } else {
+        parm.parm.capture.timeperframe.numerator = 1;
+        parm.parm.capture.timeperframe.denominator = 60;
+        if (ioctl(fd, VIDIOC_S_PARM, &parm) != 0)
+        {
+            fprintf(stderr, "CaptureV4L2::startCapture: VIDIOC_S_PARM failed, framerate may be wrong: %m\n");
+        }
     }
 
     // Convert the format we actually got into a COLOR_* value
